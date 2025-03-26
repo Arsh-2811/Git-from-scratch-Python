@@ -1,5 +1,7 @@
 import hashlib
 import os
+import json
+import shutil
 
 from collections import namedtuple
 from contextlib import contextmanager
@@ -73,6 +75,17 @@ def iter_refs (prefix='', deref=True):
         if ref.value:
             yield refname, ref
 
+@contextmanager
+def get_index():
+    index = {}
+    if os.path.isfile(f'{GIT_DIR}/index'):
+        with open(f'{GIT_DIR}/index') as f:
+            index = json.load(f)
+
+    yield index
+
+    with open(f'{GIT_DIR}/index', 'w') as f:
+        json.dump(index, f)
 
 def hash_object (data, type_='blob'):
     obj = type_.encode () + b'\x00' + data
@@ -92,3 +105,22 @@ def get_object (oid, expected='blob'):
     if expected is not None:
         assert type_ == expected, f'Expected {expected}, got {type_}'
     return content
+
+def object_exists(oid):
+    return os.path.isfile(f'{GIT_DIR}/objects/{oid}')
+
+def fetch_objects_f_missing(oid, remote_git_dir):
+    if object_exists(oid):
+        return
+    remote_git_dir += '/.ugit'
+    shutil.copy(f'{remote_git_dir}/objects/{oid}',
+                f'{GIT_DIR}/objects/{oid}')
+    
+    print('Adding : ' + f'{remote_git_dir}/objects/{oid}')
+
+def push_object(oid, remote_git_dir):
+    remote_git_dir += '/.ugit'
+    shutil.copy(f'{GIT_DIR}/objects/{oid}',
+                f'{remote_git_dir}/objects/{oid}')
+    
+    print('Pushing : ' + f'{GIT_DIR}/objects/{oid}')

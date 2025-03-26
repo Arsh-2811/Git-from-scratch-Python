@@ -174,6 +174,8 @@ def get_merge_base (oid1, oid2):
         if oid in parents1:
             return oid
 
+def is_ancestor_of (commit, maybe_ancestor):
+    return maybe_ancestor in iter_commits_and_parents({commit})
 
 def create_tag (name, oid):
     data.update_ref (f'refs/tags/{name}', data.RefValue (symbolic=False, value=oid))
@@ -239,6 +241,24 @@ def iter_commits_and_parents (oids):
         # Return other parents later
         oids.extend (commit.parents[1:])
 
+def iter_objects_in_commits(oids):
+    visited = set ()
+    def iter_objects_in_tree (oid):
+        visited.add (oid)
+        yield oid
+        for type_, oid, _ in _iter_tree_entries (oid):
+            if oid not in visited:
+                if type_ == 'tree':
+                    yield from iter_objects_in_tree (oid)
+                else:
+                    visited.add (oid)
+                    yield oid
+
+    for oid in iter_commits_and_parents (oids):
+        yield oid
+        commit = get_commit (oid)
+        if commit.tree not in visited:
+            yield from iter_objects_in_tree (commit.tree)
 
 def get_oid (name):
     if name == '@': name = 'HEAD'
@@ -261,6 +281,13 @@ def get_oid (name):
 
     assert False, f'Unknown name {name}'
 
+def add(filenames):
+    with data.get_index() as index:
+        for filename in filenames:
+            filenames = os.path.relpath(filename)
+            with open(filename, 'rb') as f:
+                oid = data.hash_object(f.read())
+            index[filename] = oid
 
 def is_ignored (path):
     return '.ugit' in path.split ('/')
